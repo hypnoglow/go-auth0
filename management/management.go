@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 // Auth embeds a Config and Token structs so it can be used to authenticate our
@@ -136,28 +136,17 @@ func New(domain, clientID, clientSecret string, options ...apiOption) (*Manageme
 		option(m)
 	}
 
-	auth := &Auth{
-		AuthConfig{
-			Audience:     "https://" + domain + "/api/v2/",
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			GrantType:    "client_credentials",
-		},
-		Token{},
+	params := url.Values{}
+	params.Set("audience", "https://"+domain+"/api/v2/")
+
+	conf := &clientcredentials.Config{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		TokenURL:       "https://" + domain + "/oauth/token",
+		EndpointParams: params,
 	}
 
-	err := m.post("https://"+domain+"/oauth/token", auth)
-	if err != nil {
-		return nil, err
-	}
-
-	ts := oauth2.StaticTokenSource(&oauth2.Token{
-		AccessToken: auth.Token.AccessToken,
-		TokenType:   auth.Token.TokenType,
-		Expiry:      time.Now().Add(time.Duration(auth.Token.ExpiresIn) * time.Second),
-	})
-
-	m.http = wrapUserAgent(wrapRetry(oauth2.NewClient(context.Background(), ts)))
+	m.http = wrapUserAgent(wrapRetry(conf.Client(context.Background())))
 
 	m.Client = NewClientManager(m)
 	m.ClientGrant = NewClientGrantManager(m)
